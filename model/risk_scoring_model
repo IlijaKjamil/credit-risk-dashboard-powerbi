@@ -1,0 +1,132 @@
+"""
+Credit Risk Scorecard Model
+Project: Credit Risk Dashboard — Portfolio Project
+Author: Ilija Kjamilov
+
+Methodology: Weighted scorecard model assigning risk points per variable band.
+Higher score = higher risk. Final score maps to Risk Grade (A–E).
+
+Usage:
+    python risk_scoring_model.py
+
+Output:
+    9_loan_portfolio_scored.csv  — original data + risk score columns
+"""
+
+import pandas as pd
+import numpy as np
+
+# ─── Load Data ───────────────────────────────────────────────────────────────
+df = pd.read_csv('9_loan_portfolio.csv')
+
+# ─── Scorecard Weights ───────────────────────────────────────────────────────
+
+def score_credit(cs):
+    if cs >= 780:   return 0
+    elif cs >= 740: return 10
+    elif cs >= 700: return 20
+    elif cs >= 660: return 35
+    elif cs >= 620: return 55
+    elif cs >= 580: return 75
+    else:           return 100
+
+def score_dti(dti):
+    dti_pct = dti * 100
+    if dti_pct < 20:   return 0
+    elif dti_pct < 28: return 10
+    elif dti_pct < 36: return 20
+    elif dti_pct < 43: return 35
+    elif dti_pct < 50: return 55
+    else:              return 80
+
+def score_ltv(ltv):
+    if ltv is None or pd.isna(ltv): return 15  # unsecured default
+    ltv_pct = ltv * 100
+    if ltv_pct < 60:   return 0
+    elif ltv_pct < 70: return 5
+    elif ltv_pct < 80: return 15
+    elif ltv_pct < 90: return 30
+    elif ltv_pct < 100: return 50
+    else:              return 70
+
+def score_employment(emp_status, emp_years):
+    if emp_status == 'Retired':      base = 10
+    elif emp_status == 'Employed':   base = 0
+    elif emp_status == 'Contract':   base = 20
+    elif emp_status == 'Self-Employed': base = 25
+    else:                            base = 20
+    
+    if emp_years >= 10:   tenure = 0
+    elif emp_years >= 5:  tenure = 5
+    elif emp_years >= 2:  tenure = 15
+    else:                 tenure = 25
+    return base + tenure
+
+def score_missed_payments(missed):
+    if missed == 0:   return 0
+    elif missed == 1: return 30
+    elif missed == 2: return 55
+    elif missed == 3: return 75
+    else:             return 100
+
+# ─── Apply Scores ─────────────────────────────────────────────────────────────
+df['Score_CreditBand']     = df['Credit_Score'].apply(score_credit)
+df['Score_DTI']            = df['DTI_Pct'].apply(score_dti)
+df['Score_LTV']            = df['LTV_Pct'].apply(score_ltv)
+df['Score_Employment']     = df.apply(lambda r: score_employment(r['Employment_Status'], r['Employment_Years']), axis=1)
+df['Score_PaymentHistory'] = df['Missed_Payments'].apply(score_missed_payments)
+
+# Weights (sum to 1.0)
+WEIGHTS = {
+    'Score_CreditBand':     0.30,
+    'Score_DTI':            0.25,
+    'Score_LTV':            0.15,
+    'Score_Employment':     0.10,
+    'Score_PaymentHistory': 0.20,
+}
+
+df['Risk_Score'] = sum(
+    df[col] * w for col, w in WEIGHTS.items()
+).round(1)
+
+# ─── Risk Grade ───────────────────────────────────────────────────────────────
+def grade(score):
+    if score < 15:   return 'A'   # Low Risk
+    elif score < 30: return 'B'   # Moderate-Low
+    elif score < 50: return 'C'   # Moderate
+    elif score < 65: return 'D'   # High
+    else:            return 'E'   # Very High
+
+df['Risk_Grade']  = df['Risk_Score'].apply(grade)
+df['Risk_Label']  = df['Risk_Grade'].map({
+    'A': 'Low Risk',
+    'B': 'Moderate-Low',
+    'C': 'Moderate',
+    'D': 'High',
+    'E': 'Very High'
+})
+
+# Expected Loss proxy: EL = PD * LGD * EAD
+# PD estimated from risk grade
+pd_map = {'A': 0.005, 'B': 0.015, 'C': 0.04, 'D': 0.10, 'E': 0.22}
+lgd_map = {'Personal': 0.75, 'Mortgage': 0.35, 'Auto': 0.55, 'SMB': 0.60}
+
+df['PD_Estimate']        = df['Risk_Grade'].map(pd_map)
+df['LGD_Estimate']       = df['Loan_Type'].map(lgd_map)
+df['Expected_Loss']      = (df['PD_Estimate'] * df['LGD_Estimate'] * df['Outstanding_Balance']).round(2)
+df['Expected_Loss_Rate'] = (df['Expected_Loss'] / df['Outstanding_Balance']).round(4)
+
+# ─── Save ─────────────────────────────────────────────────────────────────────
+out = '9_loan_portfolio_scored.csv'
+df.to_csv(out, index=False)
+
+print(f"Scored {len(df)} loans → {out}")
+print("\nRisk Grade Distribution:")
+print(df.groupby('Risk_Grade')[['Loan_ID','Outstanding_Balance','Expected_Loss']].agg(
+    Count=('Loan_ID','count'),
+    Total_Exposure=('Outstanding_Balance','sum'),
+    Expected_Loss=('Expected_Loss','sum')
+).round(0))
+
+print(f"\nTotal Portfolio Expected Loss: ${df['Expected_Loss'].sum():,.0f}")
+print(f"Portfolio EL Rate: {(df['Expected_Loss'].sum() / df['Outstanding_Balance'].sum()):.2%}")
