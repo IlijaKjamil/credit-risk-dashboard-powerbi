@@ -1,4 +1,4 @@
-# Credit Risk Dashboard — NorthTrust Financial
+# Credit Risk Dashboard  NorthTrust Financial
 
 Power BI dashboard for monitoring a $445M loan portfolio across 2,200 borrowers.
 Built as a portfolio project demonstrating credit risk modeling, DAX measure design,
