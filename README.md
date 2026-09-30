@@ -14,7 +14,7 @@ and dark-theme dashboard development in Power BI.
 - Credit Score vs DTI % scatter by Risk Grade
 
 **Page 2 — High Risk Watchlist (Grade D & E)**
-- Pre-filtered KPIs: 37 high-risk loans, 12 severely delinquent, $205K expected loss, 7.50% EL rate
+- Pre-filtered KPIs: 37 high-risk loans, 12 severely delinquent, $205K expected loss, 5.50% EL rate
 - Full loan detail table with grade badges and delinquency indicators
 - EL by State and Avg Risk Score by Loan Type (bar charts)
 
